@@ -5,6 +5,8 @@ This project aims to provide examples of how to improve python code through refa
 ## Example 1
 See [example1.py](example1.py) for an example of code in need of a refactor.  
 
+See [example1_annotated.py](example1_annotated.py) for a version of example1.py that has been annotated with comments regarding problems in the code.
+
 See [example1_pseudocode.py](example1_pseudocode.py) for an example of a pseudocode plan for the code.
 
 See [example1_refactored.py](example1_refactored.py) for a refactored version of example1.py.
