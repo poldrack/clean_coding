@@ -1,6 +1,7 @@
 # Refactored version of example1.py
 # load survey data, perform factor analysis, and compare to mental health data
 
+
 import os
 from pathlib import Path
 import pandas as pd
@@ -8,7 +9,7 @@ import numpy as np
 from scipy.stats import pearsonr
 from sklearn.decomposition import FactorAnalysis
 from sklearn.preprocessing import scale
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 
 # load health data
@@ -49,7 +50,7 @@ def confirm_data_frame_index_alignment(df1, df2):
 
 
 # remove subjects with missing data for either set of variables
-def remove_NA_rows_from_data_frames(df1, df2):
+def remove_NA_rows_from_matched_data_frames(df1, df2):
     indices_to_retain = list(set(df1.dropna().index).intersection(df2.dropna().index))
     return(df1.loc[indices_to_retain, :], df2.loc[indices_to_retain, :])
 
@@ -62,9 +63,8 @@ def get_best_FA_dimensionality(data, maxdims=None):
     AIC_by_components = OrderedDict()
 
     for n_components in range(1, maxdims + 1):
-        fa = FactorAnalysis(n_components)
-        fa.fit(data)
-        AIC_by_components[n_components] = n_components * 2 - 2 * fa.score(data)
+        fa = fit_and_score_factor_analysis(data, n_components)
+        AIC_by_components[n_components] = fa.AIC
 
     minimum_AIC = min(AIC_by_components.values())
     best_dimensionality_list = [
@@ -77,10 +77,15 @@ def get_best_FA_dimensionality(data, maxdims=None):
 
 
 # compute FA solution for chosen dimensionality
-def compute_factor_analysis(data, n_components):
+def fit_and_score_factor_analysis(data, n_components):
     fa = FactorAnalysis(n_components)
     scores = fa.fit_transform(data)
-    return(scores, fa.components_)
+    AIC = n_components * 2 - 2 * fa.score(data)
+
+    factor_analysis_result = namedtuple(
+        "factor_analysis_result",
+        ["loadings", "scores", "AIC"])
+    return(factor_analysis_result(fa.components_, scores, AIC))
 
 
 # print report with highest absolute loading variables for each component
@@ -126,7 +131,7 @@ if __name__ == "__main__":
     behavioral_data_raw = load_behavioral_data(datadir)
     survey_data_full = extract_surveys_from_behavioral_data(behavioral_data_raw)
 
-    health_data_nonan, survey_data_nonan = remove_NA_rows_from_data_frames(
+    health_data_nonan, survey_data_nonan = remove_NA_rows_from_matched_data_frames(
         health_data_mean, survey_data_full)
 
     health_data = scale_data_frame(health_data_nonan)
@@ -135,6 +140,10 @@ if __name__ == "__main__":
     confirm_data_frame_index_alignment(health_data, survey_data)
 
     n_components = get_best_FA_dimensionality(survey_data)
-    scores, loadings = compute_factor_analysis(survey_data, n_components)
+    factor_analysis_result = fit_and_score_factor_analysis(survey_data, n_components)
 
-    create_loading_report_by_component(scores, loadings, survey_data, health_data)
+    create_loading_report_by_component(
+        factor_analysis_result.scores,
+        factor_analysis_result.loadings,
+        survey_data,
+        health_data)
