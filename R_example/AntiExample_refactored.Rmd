@@ -1,0 +1,200 @@
+---
+title: 'Clean Coding: Refactored version of anti-example'
+output:
+  html_document:
+    df_print: paged
+---
+
+The overall goal of this notebook is to:
+
+- load the Eisenberg et al. health and survey/task data files
+- compute the mean response across several mental health variables
+- select all survey variables from the survey dataset
+- Perform factor analysis on the survey data across a range of dimensionalities and select the dimensionality with the lowest BIC value
+- Use the selected factor analysis solution to obtain scores for each indvidiual, and compute their correlation with the mean mental health variable
+- For those factors with a correlation above .1, print the survey variables with the highest positive and negative loadings on the factor, for interpretation
+
+## Load necessary libraries
+
+```{r setup}
+library(tidyverse)
+library(psych)
+library(assertthat)
+library(knitr)
+```
+
+## Load data files
+
+```{r load_datafiles}
+
+datadir <- '/Users/poldrack/Dropbox/code/clean_coding/data'
+
+health_data <- readr::read_csv(paste(datadir, 'health.csv', sep='/'))
+health_data <- health_data %>% dplyr::rename(subcode=X1)
+
+survey_task_data <- readr::read_csv(paste(datadir, 'meaningful_variables_clean.csv', sep='/'))
+survey_task_data <- survey_task_data %>% dplyr::rename(subcode=X1) 
+```
+
+## Create mental health variable
+
+Using the set of variables for the mental health survey, create a mean mental health score.  Aklso keep the subject code for matching with the survey variable data frame.
+
+```{r create_mental_health_var}
+
+mental_health_variables <- c('subcode', 'Nervous', 'Hopeless', 'RestlessFidgety', 'Depressed', 'EverythingIsEffort', 'Worthless')
+
+mental_health_data <- health_data %>%
+  dplyr::select(tidyselect::all_of(mental_health_variables)) %>%
+  tidyr::drop_na() %>%
+  dplyr::mutate(mean_mental_health=rowMeans(dplyr::select(., -subcode))) %>%
+  dplyr::select(subcode, mean_mental_health)
+```
+
+## Select survey variables
+
+Survey variables in the Eisenberg dataset are denoted by "_survey" in their name.
+
+```{r select_survey_vars}
+
+survey_data <- survey_task_data %>%
+  dplyr::select(contains('_survey')) %>%
+  mutate(subcode = survey_task_data$subcode)
+
+```
+
+## Clean datasets
+
+Remove any subjects with NA values from both dataasets
+
+```{r remove_NA_subjects_from_both_datasets}
+
+survey_data_nona <- survey_data %>%
+  drop_na()
+
+mental_health_data_nona <- mental_health_data %>%
+  drop_na()
+
+complete_subjects <- Reduce(intersect, list(survey=survey_data_nona$subcode,
+                                           mh=mental_health_data$subcode))
+
+survey_data_complete <- survey_data_nona %>%
+  dplyr::filter(subcode %in% complete_subjects)
+
+mental_health_data_complete <- mental_health_data_nona %>%
+  dplyr::filter(subcode %in% complete_subjects)
+
+# confirm that the subject codes are identical
+assertthat::assert_that(identical(survey_data_complete$subcode, mental_health_data_complete$subcode))
+
+```
+
+## Scale the survey dataset
+
+```{r scale_survey_data}
+
+# need to exclude subcode variable
+numeric_variable_names <- names(Filter(is.numeric,survey_data_complete))
+
+survey_data_scaled <- survey_data_complete %>%
+  dplyr::mutate(dplyr::across(where(is.numeric), scale)) %>%
+  # remove subcode so that full data frame can go into FA function
+  dplyr::select(-subcode)
+
+```
+
+## Identify dimensionality for factor analysis
+
+Perform factor analysis across multiple dimensionalities and identify best dimensionality as one with minimum BIC.  No rotation is necessary since we are just getting BIC which is not affected by rotation.
+
+```{r get_FA_dimensionality}
+
+maximum_dimensionality <- 12
+BIC_values <- array(dim=maximum_dimensionality)
+
+for (nfactors in 1:maximum_dimensionality){
+  BIC_values[nfactors] <- psych::fa(survey_data_scaled, nfactors=nfactors, fm='gls',rotate='none')$BIC
+}
+
+best_dimensionality <- which.min(BIC_values)
+cat(sprintf('Best dimensionality: %d\n',best_dimensionality ))
+
+```
+
+# Perform FA at selected dimensionality
+
+If factor analysis was expensive then we would save the solution in the previous step, but it's cheap so we just recompute it.  Also obtain clusters of associated variables for each factor using factor2cluster.
+
+```{r get_factor_analysis_solution}
+
+fa_solution <- psych::fa(survey_data_scaled, nfactors=best_dimensionality, fm='gls')
+
+# reorder results to match numeric ordering of factors
+factor_clusters <- data.frame(factor2cluster(fa_solution))
+factor_clusters <- factor_clusters[,order(colnames(factor_clusters))]
+
+factor_scores <- fa_solution$scores
+factor_scores <- factor_scores[, order(colnames(factor_scores))]
+
+factor_item_weights <- fa_solution$weights
+factor_item_weights <- factor_item_weights[,order(colnames(factor_item_weights))]
+
+```
+
+## Compute correlation of each factor with mental health
+
+Also store p-values for correlation test.
+
+```{r get_mental_health_factor_corrs}
+
+factor_cor_results <- data.frame(correlation=array(dim=best_dimensionality),
+                                 pvalue=array(dim=best_dimensionality))
+
+mean_mental_health <- mental_health_data_complete %>%
+  dplyr::pull(mean_mental_health)
+
+for (factor_num in 1:fa_solution$factors){
+  corr_results <- cor.test(factor_scores[,factor_num], mean_mental_health)
+  factor_cor_results[factor_num, 'correlation'] <- corr_results$estimate
+  factor_cor_results[factor_num, 'pvalue'] <- corr_results$p.value
+}
+```
+
+
+## Print associated variables for significant correlations
+
+```{r}
+# use Bonferroni correction to determine cutoff
+corrected_p_cutoff <- 0.05/best_dimensionality
+
+num_vars_to_show <- 3 
+
+for (factor_num in 1:fa_solution$factors){
+  corrected_sig = factor_cor_results[factor_num, 'pvalue'] <= corrected_p_cutoff
+  if (corrected_sig){
+    sig_marker = '*'
+  } else {
+    sig_marker = ''
+  }
+  cat(sprintf('\nFactor %d: r(factor scores, mental health) = %0.3f, p = %0.3f %s\n', 
+                factor_num,
+                factor_cor_results[factor_num, 'correlation'],
+                factor_cor_results[factor_num, 'pvalue'],
+                sig_marker))
+  if (corrected_sig){
+    positive_weights <- sort(factor_item_weights[factor_clusters[,factor_num]>0,factor_num], decreasing=TRUE)
+    if (length(positive_weights) > num_vars_to_show){
+      positive_weights <- positive_weights[1:num_vars_to_show]
+    }
+    negative_weights <- sort(factor_item_weights[factor_clusters[,factor_num]<0,factor_num])
+    if (length(negative_weights) > num_vars_to_show){
+      negative_weights <- negative_weights[1:num_vars_to_show]
+    }
+    combined_weights <- c(positive_weights, negative_weights)
+    if (length(combined_weights) > 0){
+      print(knitr::kable(combined_weights))
+    }
+  }
+}
+```
+

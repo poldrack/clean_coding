@@ -1,0 +1,40 @@
+---
+title: 'Clean Coding: Anti-example'
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+library(tidyverse)
+maxD=16
+coff=0.1
+hc=c('X1', 'Nervous', 'Hopeless', 'RestlessFidgety', 'Depressed', 'EverythingIsEffort', 'Worthless')
+h=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/health.csv')%>%select(hc)%>%drop_na()%>%mutate(m=rowMeans(select(., -X1)))
+data=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/meaningful_variables_clean.csv')
+x1=data$X1
+gc=c()
+for (i in 1:ncol(data)){
+if (grepl('survey', names(data)[i])) gc = c(gc, names(data)[i])}
+data=data[gc]%>%mutate(X1=x1)
+gs=c()
+for (i in 1:nrow(data)){if (sum(is.na(data[i,]))>0) next else gs = c(gs,i)
+}
+data=data[gs,]%>%mutate_each_(funs(scale), vars=names(Filter(is.numeric,data)))
+bicv=array(dim=maxD)
+coff=0.1
+library(psych)
+for (i in 1:maxD){
+    bicv[i]=fa(data%>%select(-X1), nfactors=i,fm='gls',rotate='none')$BIC}
+fares=fa(data%>%select(-X1), nfactors=which.min(bicv),fm='gls')
+fc=data.frame(factor2cluster(fares))
+for (i in 1:which.min(bicv)){
+cc=cor(fares$scores[,i], h[gs,'m'])
+    print(cc)
+if (abs(cc)>coff){
+    print(sort(fares$weights[fc[,i]>0,i], decreasing=TRUE))
+    print(sort(fares$weights[fc[,i]<0,i]))
+}}
+
+```

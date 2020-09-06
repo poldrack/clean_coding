@@ -1,0 +1,59 @@
+---
+title: 'Clean Coding: Annotated version of anti-example'
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+library(tidyverse)
+# badly named variables, and variables defined far from their use
+maxD=16
+coff=0.1
+hc=c('X1', 'Nervous', 'Hopeless', 'RestlessFidgety', 'Depressed', 'EverythingIsEffort', 'Worthless')
+# full namespace should be used for functions from libraries
+# - e.g. readr::read_csv, dplyr::select, tidyr::drop_na, dplyr::mutate
+# absolute paths used in code
+# complex pipe on a single line
+# inadequate spacing between commands
+# unclear what this command is actually doing - what's the rationale?
+h=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/health.csv')%>%select(hc)%>%drop_na()%>%mutate(m=rowMeans(select(., -X1)))
+# data is a built-in function - overwriting it can cause problems
+data=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/meaningful_variables_clean.csv')
+x1=data$X1
+# should break up different functional elements into functions or at least different cells
+gc=c()
+# should organize loops according to style guide with proper brace location and indentation
+for (i in 1:ncol(data))
+{
+if (grepl('survey', names(data)[i])) gc = c(gc, names(data)[i])}
+data=data[gc]%>%mutate(X1=x1)
+# the following is a very complicated way of re-implementing the drop_na function
+gs=c()
+# bad loop formatting
+for (i in 1:nrow(data)){if (sum(is.na(data[i,]))>0) next else gs = c(gs,i)
+}
+# the following is doing two things which are totally opaque
+data=data[gs,]%>%mutate_each_(funs(scale), vars=names(Filter(is.numeric,data)))
+bicv=array(dim=maxD)
+# library imports should be at the top of the code
+library(psych)
+# bad loop formatting
+for (i in 1:maxD){
+# should have commentary on the motivation for these particular parameters
+    bicv[i]=fa(data%>%select(-X1), nfactors=i,fm='gls',rotate='none')$BIC}
+fares=fa(data%>%select(-X1), nfactors=which.min(bicv),fm='gls')
+fc=data.frame(factor2cluster(fares))
+# what is the following doing?  also badly formatted loop layout
+for (i in 1:which.min(bicv)){
+# when we use h[gs,'m'] we are assuming that the order subject codes in h matches those in data
+# this assumption turns out to be correct in this parrtiuclar case, but assumptions like this are bad...
+cc=cor(fares$scores[,i], h[gs,'m'])
+    print(cc)
+if (abs(cc)>coff){
+print(sort(fares$weights[fc[,i]>0,i], decreasing=TRUE))
+print(sort(fares$weights[fc[,i]<0,i]))
+}}
+
+```
