@@ -163,7 +163,7 @@ for (factor_num in 1:fa_solution$factors){
 
 ## Print associated variables for significant correlations
 
-```{r}
+```{r print_top_loading_variables}
 # use Bonferroni correction to determine cutoff
 corrected_p_cutoff <- 0.05/best_dimensionality
 
