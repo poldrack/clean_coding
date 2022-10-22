@@ -17,8 +17,8 @@ from scipy.stats import *
 maxD=12  # variable defined well before it is used
 hc=['Nervous', 'Hopeless', 'RestlessFidgety', 'Depressed', 'EverythingIsEffort', 'Worthless', ]
 # hard coded file paths
-h=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/health.csv',index_col=0)[hc].dropna().mean(1)
-data=read_csv('/Users/poldrack/Dropbox/code/clean_coding/data/meaningful_variables_clean.csv',index_col=0)
+h=read_csv('https://raw.githubusercontent.com/poldrack/clean_coding/master/data/health.csv',index_col=0)[hc].dropna().mean(1)
+data=read_csv('https://raw.githubusercontent.com/poldrack/clean_coding/master/data/meaningful_variables_clean.csv',index_col=0)
 sc=[]
 for i in range(data.shape[1]):
     if data.columns[i].split('.')[0][-7:] == '_survey':  

@@ -14,7 +14,7 @@ from collections import OrderedDict, namedtuple
 
 # load health data
 def load_health_data(datadir, filename='health.csv'):
-    return(pd.read_csv(datadir / filename, index_col=0))
+    return(pd.read_csv(os.path.join(datadir, filename), index_col=0))
 
 
 # remove unwanted variables from health data, keeping only mental health scales
@@ -28,7 +28,7 @@ def select_wanted_health_variables(health_data_raw, vars_to_use=None):
 
 # load behavioral data (which includes survey and task data)
 def load_behavioral_data(datadir, filename='meaningful_variables_clean.csv'):
-    return(pd.read_csv(datadir / filename, index_col=0))
+    return(pd.read_csv(os.path.join(datadir, filename), index_col=0))
 
 
 # extract survey data from behavioral data
@@ -120,8 +120,7 @@ def scale_data_frame(df):
 
 
 if __name__ == "__main__":
-    basedir = Path(os.getcwd())
-    datadir = basedir / 'data'
+    datadir = 'https://raw.githubusercontent.com/poldrack/clean_coding/master/data'
 
     health_data_raw = load_health_data(datadir)
     health_data_selected = select_wanted_health_variables(health_data_raw)
